@@ -1,0 +1,94 @@
+{
+  "id": "/",
+  "name": "VONDRO — Todo lo que necesitás, más cerca",
+  "short_name": "VONDRO",
+  "description": "Tienda online mayorista a minorista en Córdoba Capital con catálogo en tiempo real, control de stock, ofertas relámpago y envíos en el día.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "window-controls-overlay", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#581C87",
+  "theme_color": "#6D28D9",
+  "categories": ["shopping", "lifestyle", "business"],
+  "lang": "es-AR",
+  "dir": "ltr",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180",
+      "purpose": "any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot-mobile.png",
+      "sizes": "540x960",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Catálogo de Ofertas y Compras VONDRO Córdoba"
+    },
+    {
+      "src": "/screenshot-desktop.png",
+      "sizes": "960x540",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Plataforma de Compras y Administración VONDRO Córdoba"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Ofertas Relámpago",
+      "short_name": "Ofertas",
+      "description": "Ver descuentos por tiempo limitado en Córdoba",
+      "url": "/?tab=search&filter=offers",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Mi Carrito",
+      "short_name": "Carrito",
+      "description": "Revisar productos y finalizar compra",
+      "url": "/?tab=cart",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Centro de Ayuda",
+      "short_name": "Ayuda 24/7",
+      "description": "Atención al cliente y garantías",
+      "url": "/?tab=help",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

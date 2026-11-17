@@ -1,0 +1,6 @@
+{
+  "name": "VONDRO — Todo lo que necesitás, más cerca",
+  "description": "Tienda online mayorista a minorista para Córdoba Capital con catálogo en tiempo real, control de stock, envíos y panel de administración.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

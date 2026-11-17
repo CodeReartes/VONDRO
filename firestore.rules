@@ -1,0 +1,298 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------
+    // AUTH, IDENTITY & VALIDATION HELPERS
+    // -------------------------------------------------------------
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isAuthenticated() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9._\\-]+$');
+    }
+
+    function isAdmin() {
+      return isEmailVerified() && (
+        request.auth.token.email == 'reartes17diego@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidUserDoc(data) {
+      return data.keys().hasAll(['id', 'email', 'role']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.email is string && data.email.size() <= 254 &&
+        data.role in ['customer', 'admin', 'courier'];
+    }
+
+    function isValidProductStockUpdate(data) {
+      return data.keys().hasAll(['name', 'salePrice', 'categoryId', 'stock']) &&
+        data.stock is number && data.stock >= 0 &&
+        (!data.keys().hasAny(['stockStatus']) || data.stockStatus in ['available', 'low_stock', 'out_of_stock', 'hidden']);
+    }
+
+    function isValidOrderDoc(data) {
+      return data.keys().hasAll(['orderNumber', 'customer', 'items', 'total', 'paymentMethod', 'status', 'userId']) &&
+        data.userId is string && data.userId.size() <= 128 &&
+        data.orderNumber is string && data.orderNumber.size() <= 40 &&
+        data.items is list && data.items.size() >= 1 && data.items.size() <= 100 &&
+        data.total is number && data.total >= 0 &&
+        data.paymentMethod is string && data.paymentMethod.size() <= 40 &&
+        data.status is string && data.status.size() <= 40;
+    }
+
+    function isValidAssistantConversation(data) {
+      return data.keys().hasAll(['id', 'userId', 'channel', 'status']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.userId is string && data.userId.size() <= 128 &&
+        data.channel is string && data.channel.size() <= 32 &&
+        data.status is string && data.status.size() <= 32;
+    }
+
+    function isValidAssistantMessage(data) {
+      return data.keys().hasAll(['id', 'conversationId', 'userId', 'sender', 'text']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.conversationId is string && data.conversationId.size() <= 128 &&
+        data.userId is string && data.userId.size() <= 128 &&
+        data.sender is string && data.sender.size() <= 32 &&
+        data.text is string && data.text.size() <= 10000;
+    }
+
+    function isValidSupportTicket(data) {
+      return data.keys().hasAll(['id', 'ticketNumber', 'userId', 'customerName', 'reason', 'priority', 'status']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.ticketNumber is string && data.ticketNumber.size() <= 40 &&
+        data.userId is string && data.userId.size() <= 128 &&
+        data.customerName is string && data.customerName.size() <= 160 &&
+        data.reason is string && data.reason.size() <= 64 &&
+        data.priority is string && data.priority.size() <= 32 &&
+        data.status is string && data.status.size() <= 32;
+    }
+
+    function isValidUnresolvedQuery(data) {
+      return data.keys().hasAll(['id', 'userId', 'channel']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.userId is string && data.userId.size() <= 128 &&
+        data.channel is string && data.channel.size() <= 32 &&
+        (!data.keys().hasAny(['rawQuery']) || (data.rawQuery is string && data.rawQuery.size() <= 2000));
+    }
+
+    // -------------------------------------------------------------
+    // USERS COLLECTION
+    // -------------------------------------------------------------
+    match /users/{userId} {
+      allow get: if (isOwner(userId) && isValidId(userId)) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(userId) && isValidUserDoc(incoming()) && (
+        isAdmin() ||
+        (isOwner(userId) && incoming().id == request.auth.uid && incoming().role == 'customer')
+      );
+      allow update: if isValidId(userId) && isValidUserDoc(incoming()) && (
+        isAdmin() ||
+        (isOwner(userId) &&
+         incoming().id == existing().id &&
+         !incoming().diff(existing()).affectedKeys().hasAny(['role']))
+      );
+      allow delete: if isValidId(userId) && (isAdmin() || isOwner(userId));
+    }
+
+    // -------------------------------------------------------------
+    // PRODUCTS COLLECTION
+    // Public catalog read. Admin full write; authenticated checkout can strictly decrement stock.
+    // -------------------------------------------------------------
+    match /products/{productId} {
+      allow read: if true;
+      allow create, delete: if isAdmin() && isValidId(productId);
+      allow update: if isValidId(productId) && isValidProductStockUpdate(incoming()) && (
+        isAdmin() ||
+        (isAuthenticated() &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['stock', 'stockStatus', 'salesCount', 'unitsSold', 'lastSoldAt', 'lastUpdated', 'updatedAt']) &&
+         incoming().stock >= 0 &&
+         incoming().stock < existing().stock)
+      );
+    }
+
+    // -------------------------------------------------------------
+    // ORDERS COLLECTION
+    // Strict owner/verified-email/admin access only. No anonymous or guest reads/writes.
+    // -------------------------------------------------------------
+    match /orders/{orderId} {
+      allow get: if isValidId(orderId) && (
+        isAdmin() ||
+        (isAuthenticated() && (
+          existing().userId == request.auth.uid ||
+          (isEmailVerified() && existing().customer != null && existing().customer.email == request.auth.token.email)
+        ))
+      );
+      allow list: if isAdmin() || (
+        isAuthenticated() && (
+          existing().userId == request.auth.uid ||
+          (isEmailVerified() && existing().customer != null && existing().customer.email == request.auth.token.email)
+        )
+      );
+      allow create: if isAuthenticated() &&
+        isValidId(orderId) &&
+        isValidOrderDoc(incoming()) &&
+        incoming().userId == request.auth.uid &&
+        (isAdmin() || incoming().status in ['pending', 'pending_payment']);
+      allow update: if isAdmin() && isValidId(orderId) && isValidOrderDoc(incoming());
+      allow delete: if isValidId(orderId) && (
+        isAdmin() ||
+        (isAuthenticated() &&
+         existing().userId == request.auth.uid &&
+         existing().status in ['cancelled', 'CANCELADO'])
+      );
+    }
+
+    // -------------------------------------------------------------
+    // CATALOG TAXONOMY & STORE CONFIGURATION (Public Read, Admin Write)
+    // -------------------------------------------------------------
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidId(categoryId);
+    }
+
+    match /shippingZones/{zoneId} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidId(zoneId);
+    }
+
+    match /coupons/{couponId} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidId(couponId);
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidId(settingId);
+    }
+
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    match /faqs/{faqId} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidId(faqId);
+    }
+
+    // -------------------------------------------------------------
+    // ADMIN ONLY INTERNAL LEDGERS & LOGISTICS (Zero Trust)
+    // -------------------------------------------------------------
+    match /suppliers/{supplierId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /stockMovements/{movementId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAdmin() || (isAuthenticated() && existing().userId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    match /adminActions/{actionId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /returns/{returnId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /couriers/{courierId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /logisticsProviders/{providerId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /shippingExpenses/{expenseId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /shippingRecords/{recordId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /supplierChecks/{checkId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /purchaseOrders/{orderId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /supplierReturns/{returnId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /dailyStockAudits/{auditId} {
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // ASSISTANT & SUPPORT CHAT (Authenticated Owner or Admin Only)
+    // -------------------------------------------------------------
+    match /assistantConversations/{conversationId} {
+      allow get: if isValidId(conversationId) && (isAdmin() || (isAuthenticated() && existing().userId == request.auth.uid));
+      allow list: if isAdmin() || (isAuthenticated() && existing().userId == request.auth.uid);
+      allow create: if isAuthenticated() && isValidId(conversationId) && isValidAssistantConversation(incoming()) && incoming().userId == request.auth.uid;
+      allow update: if isValidId(conversationId) && isValidAssistantConversation(incoming()) && (
+        isAdmin() ||
+        (isAuthenticated() && existing().userId == request.auth.uid && incoming().userId == existing().userId)
+      );
+      allow delete: if isValidId(conversationId) && (isAdmin() || (isAuthenticated() && existing().userId == request.auth.uid));
+    }
+
+    match /assistantMessages/{messageId} {
+      allow get: if isValidId(messageId) && (isAdmin() || (isAuthenticated() && existing().userId == request.auth.uid));
+      allow list: if isAdmin() || (isAuthenticated() && existing().userId == request.auth.uid);
+      allow create: if isAuthenticated() && isValidId(messageId) && isValidAssistantMessage(incoming()) && incoming().userId == request.auth.uid;
+      allow update, delete: if isAdmin() && isValidId(messageId);
+    }
+
+    match /supportTickets/{ticketId} {
+      allow get: if isValidId(ticketId) && (isAdmin() || (isAuthenticated() && existing().userId == request.auth.uid));
+      allow list: if isAdmin() || (isAuthenticated() && existing().userId == request.auth.uid);
+      allow create: if isAuthenticated() &&
+        isValidId(ticketId) &&
+        isValidSupportTicket(incoming()) &&
+        incoming().userId == request.auth.uid &&
+        incoming().status in ['open', 'OPEN', 'pending', 'PENDING'];
+      allow update, delete: if isAdmin() && isValidId(ticketId);
+    }
+
+    match /unresolvedQueries/{queryId} {
+      allow get: if isValidId(queryId) && (isAdmin() || (isAuthenticated() && existing().userId == request.auth.uid));
+      allow list: if isAdmin() || (isAuthenticated() && existing().userId == request.auth.uid);
+      allow create: if isAuthenticated() && isValidId(queryId) && isValidUnresolvedQuery(incoming()) && incoming().userId == request.auth.uid;
+      allow update, delete: if isAdmin() && isValidId(queryId);
+    }
+  }
+}

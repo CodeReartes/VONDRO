@@ -1,0 +1,458 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "Store product with retail and wholesale pricing, inventory, and categorization",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sku": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "description": { "type": "string" },
+        "wholesalePrice": { "type": "number" },
+        "costPrice": { "type": "number" },
+        "salePrice": { "type": "number" },
+        "profitMargin": { "type": "number" },
+        "images": { "type": "array" },
+        "categoryId": { "type": "string" },
+        "categoryName": { "type": "string" },
+        "stock": { "type": "number" },
+        "minimumStock": { "type": "number" },
+        "maximumStock": { "type": "number" },
+        "stockStatus": { "type": "string" },
+        "supplier": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "supplierSku": { "type": "string" },
+        "rating": { "type": "number" },
+        "reviewsCount": { "type": "number" },
+        "isFeatured": { "type": "boolean" },
+        "isNew": { "type": "boolean" },
+        "salesCount": { "type": "number" },
+        "unitsSold": { "type": "number" },
+        "lastUpdated": { "type": "string" }
+      },
+      "required": ["name", "salePrice", "categoryId", "stock"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "Wholesale product suppliers and vendor contact directory",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "contactName": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "website": { "type": "string" },
+        "notes": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "active"]
+    },
+    "StockMovement": {
+      "title": "StockMovement",
+      "description": "Inventory ledger movement auditing sales, restocks, adjustments, and returns",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "productSku": { "type": "string" },
+        "type": { "type": "string" },
+        "quantity": { "type": "number" },
+        "previousStock": { "type": "number" },
+        "newStock": { "type": "number" },
+        "reason": { "type": "string" },
+        "orderId": { "type": "string" },
+        "adminId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["productId", "type", "quantity", "previousStock", "newStock", "reason"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Administrative alerts for low stock, new orders, payments, and preparation tasks",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "priority": { "type": "string" },
+        "entityType": { "type": "string" },
+        "entityId": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["type", "title", "message", "priority", "read"]
+    },
+    "AdminAction": {
+      "title": "AdminAction",
+      "description": "Audit trail log of all administrative changes in the VONDRO platform",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "adminId": { "type": "string" },
+        "adminEmail": { "type": "string" },
+        "action": { "type": "string" },
+        "entity": { "type": "string" },
+        "entityId": { "type": "string" },
+        "previousValue": { "type": "string" },
+        "newValue": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["adminEmail", "action", "entity", "entityId"]
+    },
+    "OrderReturn": {
+      "title": "OrderReturn",
+      "description": "Customer return records and inventory reimbursement registry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderId": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "quantity": { "type": "number" },
+        "reason": { "type": "string" },
+        "refundStock": { "type": "boolean" },
+        "status": { "type": "string" },
+        "registeredBy": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["orderId", "productId", "quantity", "reason"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product category for store organization",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "icon": { "type": "string" },
+        "description": { "type": "string" },
+        "order": { "type": "number" },
+        "image": { "type": "string" },
+        "productCount": { "type": "number" }
+      },
+      "required": ["name", "slug"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer purchase order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "customer": { "type": "object" },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "shippingZoneId": { "type": "string" },
+        "shippingZoneName": { "type": "string" },
+        "shippingCost": { "type": "number" },
+        "isFreeShipping": { "type": "boolean" },
+        "couponCode": { "type": "string" },
+        "discountAmount": { "type": "number" },
+        "total": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "paymentStatus": { "type": "string" },
+        "status": { "type": "string" },
+        "timeline": { "type": "array" },
+        "adminNotes": { "type": "string" },
+        "userId": { "type": "string" },
+        "purchasedItemKeys": { "type": "array" },
+        "referralRewardGranted": { "type": "boolean" }
+      },
+      "required": ["orderNumber", "customer", "items", "total", "paymentMethod", "status"]
+    },
+    "Coupon": {
+      "title": "Coupon",
+      "description": "Discount coupon code",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "description": { "type": "string" },
+        "discountType": { "type": "string" },
+        "value": { "type": "number" },
+        "minPurchaseAmount": { "type": "number" },
+        "active": { "type": "boolean" },
+        "expiryDate": { "type": "string" },
+        "usedCount": { "type": "number" },
+        "ownerUserId": { "type": "string" }
+      },
+      "required": ["code", "discountType", "value", "active"]
+    },
+    "StoreSettings": {
+      "title": "StoreSettings",
+      "description": "Global store configuration and parameters",
+      "type": "object",
+      "properties": {
+        "storeName": { "type": "string" },
+        "tagline": { "type": "string" },
+        "whatsappNumber": { "type": "string" },
+        "whatsappGreeting": { "type": "string" },
+        "supportEmail": { "type": "string" },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "freeShippingThreshold": { "type": "number" },
+        "bankDetails": { "type": "object" },
+        "mercadoPago": { "type": "object" },
+        "zones": { "type": "array" }
+      },
+      "required": ["storeName", "freeShippingThreshold"]
+    },
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Customer and administrator user profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "type": "string" },
+        "addresses": { "type": "array" },
+        "favorites": { "type": "array" },
+        "referralCode": { "type": "string" },
+        "referredBy": { "type": "string" },
+        "referredByUserId": { "type": "string" },
+        "referralCount": { "type": "number" },
+        "referralEarnings": { "type": "number" },
+        "claimedReferralDiscount": { "type": "boolean" },
+        "referralRewardCreditedForReferrer": { "type": "boolean" }
+      },
+      "required": ["name", "email", "role"]
+    },
+    "Courier": {
+      "title": "Courier",
+      "description": "Delivery personnel, cadetes, and dispatch vehicles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "active": { "type": "boolean" },
+        "vehicleType": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "phone", "active"]
+    },
+    "LogisticsProvider": {
+      "title": "LogisticsProvider",
+      "description": "Logistics services and shipping carriers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "website": { "type": "string" },
+        "apiEnabled": { "type": "boolean" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "type", "active"]
+    },
+    "ShippingExpense": {
+      "title": "ShippingExpense",
+      "description": "Shipping cost expenditure records for logistics profitability analysis",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderId": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["amount", "type", "description"]
+    },
+    "AssistantConversation": {
+      "title": "AssistantConversation",
+      "description": "Customer support and assistant conversation session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "channel": { "type": "string" },
+        "status": { "type": "string" },
+        "lastMessageAt": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "channel", "status"]
+    },
+    "AssistantMessage": {
+      "title": "AssistantMessage",
+      "description": "Single message inside an assistant chat conversation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "conversationId": { "type": "string" },
+        "userId": { "type": "string" },
+        "sender": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["conversationId", "userId", "sender", "text"]
+    },
+    "SupportTicket": {
+      "title": "SupportTicket",
+      "description": "Customer support ticket for claims, damage, or returns",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ticketNumber": { "type": "string" },
+        "userId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "reason": { "type": "string" },
+        "priority": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["ticketNumber", "userId", "customerName", "reason", "priority", "status"]
+    },
+    "FAQItem": {
+      "title": "FAQItem",
+      "description": "Frequently asked question item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string" },
+        "question": { "type": "string" },
+        "answer": { "type": "string" },
+        "order": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["category", "question", "answer"]
+    },
+    "UnresolvedQuery": {
+      "title": "UnresolvedQuery",
+      "description": "Customer inquiry that requires human attention or FAQ conversion",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "rawQuery": { "type": "string" },
+        "channel": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId"]
+    },
+    "DailyStockAudit": {
+      "title": "DailyStockAudit",
+      "description": "Daily automated audit analyzing new products, depleted out-of-stock items, and inventory changes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "executedBy": { "type": "string" },
+        "totalProductsChecked": { "type": "number" },
+        "newProductsCount": { "type": "number" },
+        "outOfStockCount": { "type": "number" },
+        "stockChangesCount": { "type": "number" },
+        "criticalLowStockCount": { "type": "number" },
+        "summaryNote": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["date", "timestamp", "executedBy", "totalProductsChecked"]
+    }
+  },
+  "firestore": {
+    "/dailyStockAudits/{auditId}": {
+      "schema": "DailyStockAudit",
+      "description": "Daily stock and catalog analysis audit records and snapshots"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Collection of store products"
+    },
+    "/suppliers/{supplierId}": {
+      "schema": "Supplier",
+      "description": "Collection of wholesale vendors and suppliers"
+    },
+    "/stockMovements/{movementId}": {
+      "schema": "StockMovement",
+      "description": "Audit ledger of stock entries, sales, adjustments, and returns"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "System alerts and notifications for operations"
+    },
+    "/adminActions/{actionId}": {
+      "schema": "AdminAction",
+      "description": "Administrative actions audit trail"
+    },
+    "/returns/{returnId}": {
+      "schema": "OrderReturn",
+      "description": "Customer returns and stock re-entry"
+    },
+    "/couriers/{courierId}": {
+      "schema": "Courier",
+      "description": "Couriers and delivery personnel"
+    },
+    "/logisticsProviders/{providerId}": {
+      "schema": "LogisticsProvider",
+      "description": "Logistics companies and external providers"
+    },
+    "/shippingExpenses/{expenseId}": {
+      "schema": "ShippingExpense",
+      "description": "Shipping and dispatch expenses"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Collection of store categories"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Collection of customer purchase orders"
+    },
+    "/coupons/{couponId}": {
+      "schema": "Coupon",
+      "description": "Collection of promotional discount coupons"
+    },
+    "/settings/{settingId}": {
+      "schema": "StoreSettings",
+      "description": "Store configuration and operational parameters"
+    },
+    "/users/{userId}": {
+      "schema": "UserAccount",
+      "description": "Registered user accounts and saved preferences"
+    },
+    "/assistantConversations/{conversationId}": {
+      "schema": "AssistantConversation",
+      "description": "Multichannel customer support chat sessions (Web, App, WhatsApp, Admin)"
+    },
+    "/assistantMessages/{messageId}": {
+      "schema": "AssistantMessage",
+      "description": "Messages exchanged in assistant conversations"
+    },
+    "/supportTickets/{ticketId}": {
+      "schema": "SupportTicket",
+      "description": "Customer support tickets for claims, damages, returns and cancellations"
+    },
+    "/faqs/{faqId}": {
+      "schema": "FAQItem",
+      "description": "Frequently asked questions organized by category"
+    },
+    "/unresolvedQueries/{queryId}": {
+      "schema": "UnresolvedQuery",
+      "description": "User queries that were not resolved by AI or escalated to humans"
+    }
+  }
+}

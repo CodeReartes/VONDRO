@@ -1,0 +1,99 @@
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7C3AED" />
+      <stop offset="45%" stop-color="#6D28D9" />
+      <stop offset="100%" stop-color="#4C1D95" />
+    </linearGradient>
+
+    <!-- Speed Lines Gradient -->
+    <linearGradient id="speedGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FCD34D" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#F59E0B" />
+    </linearGradient>
+
+    <!-- White Bag Gradient -->
+    <linearGradient id="whiteBagGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#F8FAFC" />
+    </linearGradient>
+
+    <!-- Inner V Gradient -->
+    <linearGradient id="vGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7C3AED" />
+      <stop offset="100%" stop-color="#581C87" />
+    </linearGradient>
+
+    <!-- Soft Drop Shadow -->
+    <filter id="iconShadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#1E0A3C" flood-opacity="0.45" />
+    </filter>
+  </defs>
+
+  <!-- Background Base Canvas -->
+  <rect width="512" height="512" rx="120" fill="url(#bgGrad)" />
+
+  <!-- Subtle Ambient Glow Rings -->
+  <circle cx="430" cy="80" r="160" fill="#FFFFFF" fill-opacity="0.04" />
+  <circle cx="90" cy="430" r="140" fill="#FFFFFF" fill-opacity="0.03" />
+
+  <!-- Main VONDRO Symbol Group (Scaled and Centered) -->
+  <g transform="translate(256, 218) scale(1.68) translate(-100, -96)" filter="url(#iconShadow)">
+    <!-- Speed Motion Lines on Left -->
+    <rect x="18" y="75" width="40" height="8" rx="4" fill="url(#speedGrad)" />
+    <rect x="6" y="94" width="56" height="9" rx="4.5" fill="url(#speedGrad)" />
+    <rect x="22" y="114" width="32" height="8" rx="4" fill="url(#speedGrad)" />
+
+    <!-- Bag Handle -->
+    <path 
+      d="M74 58 C74 34, 126 34, 126 58" 
+      stroke="#FFFFFF" 
+      stroke-width="12" 
+      stroke-linecap="round" 
+      fill="none" 
+    />
+
+    <!-- Bag Body in Crisp White -->
+    <path 
+      d="M62 60 H138 C146 60, 153 66, 154 74 L162 144 C163 154, 155 162, 145 162 H55 C45 162, 37 154, 38 144 L46 74 C47 66, 54 60, 62 60 Z" 
+      fill="url(#whiteBagGrad)" 
+    />
+
+    <!-- Stylized Dynamic V Cutout in Signature Purple -->
+    <path 
+      d="M50 84 C74 84, 84 92, 102 144 C116 96, 136 72, 170 68 C148 82, 132 116, 114 160 C104 160, 94 156, 90 146 L64 94 C58 86, 52 84, 50 84 Z" 
+      fill="url(#vGrad)" 
+    />
+
+    <!-- Small Golden Flash Badge in Upper Right of Bag -->
+    <polygon points="144,80 134,96 142,97 132,112 152,94 143,93" fill="#F59E0B" />
+  </g>
+
+  <!-- VONDRO Brand Text Typography -->
+  <text 
+    x="256" 
+    y="432" 
+    text-anchor="middle" 
+    font-family="system-ui, -apple-system, 'Plus Jakarta Sans', sans-serif" 
+    font-size="44" 
+    font-weight="900" 
+    letter-spacing="9" 
+    fill="#FFFFFF"
+  >
+    VONDRO
+  </text>
+  <text 
+    x="256" 
+    y="464" 
+    text-anchor="middle" 
+    font-family="system-ui, -apple-system, 'Plus Jakarta Sans', sans-serif" 
+    font-size="16" 
+    font-weight="800" 
+    letter-spacing="3" 
+    fill="#DDD6FE"
+  >
+    CÓRDOBA
+  </text>
+</svg>
