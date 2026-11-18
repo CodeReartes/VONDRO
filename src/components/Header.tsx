@@ -85,9 +85,13 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDrawer }) => {
     return (notifications || []).filter(n => !n.read && (
       n.type === 'FLASH_OFFER' || 
       n.type === 'PRICE_DROP' || 
+      n.type === 'CUSTOM_PROMO' ||
+      n.type === 'ORDER_CREATED' ||
+      n.type === 'ORDER_PREPARING_PENDING' ||
       n.type === 'ORDER_SHIPPED' || 
       n.type === 'ORDER_OUT_FOR_DELIVERY' || 
       n.type === 'ORDER_DELIVERED' || 
+      n.type === 'ORDER_ARRIVED_TODAY' ||
       n.type === 'PAYMENT_APPROVED' || 
       n.targetAudience === 'customer' || 
       n.targetAudience === 'all'

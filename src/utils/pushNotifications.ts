@@ -1,5 +1,7 @@
 import { Order } from '../types';
 
+export const VONDRO_NOTIFICATION_LOGO = '/icon-192.png';
+
 export interface PushNotificationPayload {
   title: string;
   body: string;
@@ -14,18 +16,24 @@ export interface PushNotificationPayload {
  * Helper to match StoreContext sendPushNotification signature
  */
 export function sendPushNotification(payload: PushNotificationPayload) {
+  const brandedPayload: PushNotificationPayload = {
+    ...payload,
+    icon: payload.icon || VONDRO_NOTIFICATION_LOGO
+  };
+
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent<PushNotificationPayload>('vondro-push-received', { detail: payload }));
+    window.dispatchEvent(new CustomEvent<PushNotificationPayload>('vondro-push-received', { detail: brandedPayload }));
   }
 
-  sendBrowserNotification(payload.title, {
-    body: payload.body,
-    icon: payload.icon || payload.image || '/adaptador-universal-viajero.jpg',
+  sendBrowserNotification(brandedPayload.title, {
+    body: brandedPayload.body,
+    icon: brandedPayload.icon || VONDRO_NOTIFICATION_LOGO,
+    badge: VONDRO_NOTIFICATION_LOGO,
     data: {
-      url: payload.url || '/orders',
-      category: payload.category
+      url: brandedPayload.url || '/orders',
+      category: brandedPayload.category
     },
-    ...(payload.image ? { image: payload.image } : {})
+    ...(brandedPayload.image ? { image: brandedPayload.image } : {})
   } as NotificationOptions);
 }
 export function isPushNotificationSupported(): boolean {
@@ -49,8 +57,9 @@ export async function requestPushNotificationPermission(): Promise<boolean> {
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
       sendBrowserNotification('🔔 Notificaciones de VONDRO activadas', {
-        body: 'Te avisaremos en tiempo real sobre el estado de tus pedidos, PIN de entrega y ofertas relámpago.',
-        icon: '/adaptador-universal-viajero.jpg'
+        body: 'Te avisaremos en tiempo real sobre compras, envíos en camino y ofertas diarias.',
+        icon: VONDRO_NOTIFICATION_LOGO,
+        badge: VONDRO_NOTIFICATION_LOGO
       });
       return true;
     }
@@ -66,9 +75,10 @@ export async function requestPushPermission(): Promise<NotificationPermission> {
   try {
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
-      sendBrowserNotification('🔔 Notificaciones activadas', {
-        body: '¡Listo! Recibirás avisos de despacho y PIN de entrega de tus pedidos.',
-        icon: '/adaptador-universal-viajero.jpg'
+      sendBrowserNotification('🔔 Notificaciones VONDRO activadas', {
+        body: '¡Listo! Recibirás avisos de tus pedidos en camino, compras confirmadas y ofertas de hoy.',
+        icon: VONDRO_NOTIFICATION_LOGO,
+        badge: VONDRO_NOTIFICATION_LOGO
       });
     }
     return permission;
@@ -85,8 +95,8 @@ export function sendBrowserNotification(title: string, options?: NotificationOpt
 
   try {
     const defaultOptions: NotificationOptions = {
-      icon: '/adaptador-universal-viajero.jpg',
-      badge: '/adaptador-universal-viajero.jpg',
+      icon: VONDRO_NOTIFICATION_LOGO,
+      badge: VONDRO_NOTIFICATION_LOGO,
       tag: 'vondro-alert',
       ...options
     };
@@ -114,31 +124,50 @@ export function notifyOrderStatusChange(order: Order, newStatus: string) {
 
   switch (newStatus) {
     case 'preparing':
-      sendBrowserNotification(`📦 Pedido #${orderNum} en preparación`, {
+    case 'PREPARANDO':
+    case 'PREPARING':
+      sendBrowserNotification(`📦 Pedido ${orderNum} en preparación`, {
         body: 'Tu compra está siendo empaquetada en nuestro depósito de Córdoba Capital.',
-        tag: `order-${order.id}`
+        tag: `order-${order.id}`,
+        icon: VONDRO_NOTIFICATION_LOGO,
+        badge: VONDRO_NOTIFICATION_LOGO
       });
       break;
 
     case 'shipped':
-      sendBrowserNotification(`🛵 ¡Tu pedido #${orderNum} está en camino!`, {
-        body: `El repartidor va hacia tu domicilio. Tu PIN de recepción es: ${pin}. Téngalo listo al recibir.`,
+    case 'ENVIADO':
+    case 'out_for_delivery':
+    case 'EN_CAMINO':
+    case 'OUT_FOR_DELIVERY':
+      sendBrowserNotification(`🚚 ¡Tu pedido ${orderNum} está en camino!`, {
+        body: `El repartidor va hacia tu domicilio. Tu PIN de recepción es: ${pin}. Tenelo listo al recibir.`,
         tag: `order-${order.id}`,
+        icon: VONDRO_NOTIFICATION_LOGO,
+        badge: VONDRO_NOTIFICATION_LOGO,
         requireInteraction: true
       });
       break;
 
     case 'delivered':
-      sendBrowserNotification(`✅ ¡Pedido #${orderNum} entregado con éxito!`, {
+    case 'ENTREGADO':
+    case 'DELIVERED':
+    case 'completed':
+    case 'FINALIZADO':
+      sendBrowserNotification(`✅ ¡Pedido ${orderNum} entregado con éxito!`, {
         body: 'Esperamos que disfrutes tu compra en VONDRO. ¡Muchas gracias por confiar en nosotros!',
-        tag: `order-${order.id}`
+        tag: `order-${order.id}`,
+        icon: VONDRO_NOTIFICATION_LOGO,
+        badge: VONDRO_NOTIFICATION_LOGO
       });
       break;
 
     case 'payment_received':
-      sendBrowserNotification(`💳 Pago confirmado para #${orderNum}`, {
+    case 'PAGO_APROBADO':
+      sendBrowserNotification(`💳 Pago confirmado para ${orderNum}`, {
         body: 'Hemos verificado tu pago. Tu pedido pasó a cola de empaque prioritaria.',
-        tag: `order-${order.id}`
+        tag: `order-${order.id}`,
+        icon: VONDRO_NOTIFICATION_LOGO,
+        badge: VONDRO_NOTIFICATION_LOGO
       });
       break;
 

@@ -9,13 +9,12 @@ import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore, FieldValue } from 'firebase-admin/firestore';
 import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
 import { GoogleGenAI, Type, FunctionDeclaration } from '@google/genai';
-import { createServer as createViteServer } from 'vite';
 import { INITIAL_SETTINGS, INITIAL_COUPONS, INITIAL_FAQS, INITIAL_ORDERS } from './src/data/initialMetadata';
 import { INSTANT_BOOT_PRODUCTS } from './src/data/instantBootProducts';
 
 dotenv.config();
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const app = express();
 
 // -------------------------------------------------------------
@@ -4944,10 +4943,13 @@ app.post('/api/whatsapp/webhook', (req: Request, res: Response) => {
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     let viteMiddleware: any = null;
-    const viteReadyPromise = createViteServer({
-      server: { middlewareMode: true, hmr: false, watch: null },
-      appType: 'spa',
-    })
+    const viteReadyPromise = import('vite')
+      .then(({ createServer: createViteServer }) =>
+        createViteServer({
+          server: { middlewareMode: true, hmr: false, watch: null },
+          appType: 'spa',
+        })
+      )
       .then((vite) => {
         viteMiddleware = vite.middlewares;
         return vite.middlewares;
@@ -4963,10 +4965,20 @@ async function startServer() {
       return mw(req, res, next);
     });
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    const cwdDist = path.join(process.cwd(), 'dist');
+    const dirDist = typeof __dirname !== 'undefined' ? __dirname : cwdDist;
+    const distPath = fs.existsSync(path.join(cwdDist, 'index.html')) ? cwdDist : dirDist;
+    const indexHtmlPath = path.join(distPath, 'index.html');
+
+    app.use(express.static(distPath, { maxAge: '1h' }));
+    app.get('*', (req, res) => {
+      if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ success: false, error: 'Endpoint no encontrado' });
+      }
+      if (fs.existsSync(indexHtmlPath)) {
+        return res.sendFile(indexHtmlPath);
+      }
+      return res.status(200).send('VONDRO server running');
     });
   }
 

@@ -193,6 +193,10 @@ export const AdminAlertsTab: React.FC<AdminAlertsTabProps> = ({ onSelectTab }) =
       notifType = 'CUSTOM_PROMO';
     }
 
+    const targetOrd = broadcastMode === 'shipping'
+      ? (orders.find(o => o.id === selectedOrderId) || orders[0])
+      : undefined;
+
     // 1. Dispatch OS level / In-app Heads-up Push
     await sendPushNotification({
       title,
@@ -205,6 +209,7 @@ export const AdminAlertsTab: React.FC<AdminAlertsTabProps> = ({ onSelectTab }) =
 
     // 2. Persist in notification database for all customers
     await createNotification({
+      ...(targetOrd?.userId ? { userId: targetOrd.userId } : {}),
       title,
       message: body,
       type: notifType,
@@ -212,6 +217,8 @@ export const AdminAlertsTab: React.FC<AdminAlertsTabProps> = ({ onSelectTab }) =
       targetAudience: 'customer',
       entityType: broadcastMode === 'offer' ? 'product' : 'order',
       entityId,
+      ...(image ? { imageUrl: image } : {}),
+      linkUrl: url,
       read: false
     });
 

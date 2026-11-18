@@ -89,7 +89,15 @@ import {
   trackEvent, 
   logPaymentEvent 
 } from '../utils/analytics';
-import { sendPushNotification } from '../utils/pushNotifications';
+import { sendPushNotification, VONDRO_NOTIFICATION_LOGO } from '../utils/pushNotifications';
+import {
+  buildDailyOfferForToday,
+  detectNewPromoOrLiquidationArrivals,
+  loadReadNotificationIds,
+  persistReadNotificationIds,
+  loadSeenOrderStatuses,
+  saveSeenOrderStatuses
+} from '../utils/dailyOffersNotifications';
 import { 
   subscribeToProducts, 
   subscribeToCategories, 
@@ -1829,7 +1837,23 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const unsubNotifs = subscribeToNotifications((remoteNotifs) => {
       if (remoteNotifs) {
-        setNotifications(remoteNotifs);
+        const readIds = loadReadNotificationIds();
+        setNotifications(prev => {
+          const map = new Map<string, AppNotification>();
+          remoteNotifs.forEach(rn => {
+            if (rn?.id) {
+              map.set(rn.id, { ...rn, read: rn.read || readIds.has(rn.id) });
+            }
+          });
+          (prev || []).forEach(ln => {
+            if (ln?.id && !map.has(ln.id)) {
+              map.set(ln.id, { ...ln, read: ln.read || readIds.has(ln.id) });
+            }
+          });
+          return Array.from(map.values())
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .slice(0, 80);
+        });
       }
     }, activeUid, isUserAdmin);
 
@@ -1969,6 +1993,205 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (unsubUsers) unsubUsers();
     };
   }, [isAdmin, user?.email]);
+
+  // Real-time customer order status transition watcher (notifies buyer when order goes Preparing / On the Way / Delivered)
+  const notificationsRef = useRef<AppNotification[]>(notifications);
+  notificationsRef.current = notifications;
+
+  useEffect(() => {
+    if (!orders || orders.length === 0) return;
+    const activeUid = auth.currentUser?.uid || user?.id;
+    const activeEmail = (auth.currentUser?.email || user?.email || '').toLowerCase();
+
+    const myOrders = orders.filter(o =>
+      o && o.id && (
+        (activeUid && o.userId === activeUid) ||
+        (activeEmail && o.customer?.email?.toLowerCase() === activeEmail)
+      )
+    );
+    if (myOrders.length === 0) return;
+
+    const seenMap = loadSeenOrderStatuses();
+    const isFirstTrackingRun = Object.keys(seenMap).length === 0;
+    const nextSeen = { ...seenMap };
+    let seenChanged = false;
+    const newAlerts: { notif: AppNotification; push?: Parameters<typeof sendPushNotification>[0] }[] = [];
+
+    for (const order of myOrders) {
+      const shipUpper = String(order.shippingStatus || '').toUpperCase();
+      const statusLower = String(order.status || '').toLowerCase();
+      const compositeKey = `${statusLower}|${shipUpper}`;
+      const prevSeen = seenMap[order.id];
+
+      if (prevSeen === compositeKey) continue;
+
+      nextSeen[order.id] = compositeKey;
+      seenChanged = true;
+
+      const orderAgeMs = Date.now() - new Date(order.updatedAt || order.createdAt).getTime();
+      const isOldTerminal =
+        isFirstTrackingRun &&
+        orderAgeMs > 86400000 &&
+        (statusLower === 'delivered' || statusLower === 'entregado' || statusLower === 'cancelled' || statusLower === 'cancelado');
+      if (isOldTerminal) continue;
+
+      // Skip initial silent seed for freshly created pending order already notified by createOrder
+      if (prevSeen === undefined && statusLower === 'pending_payment' && shipUpper === 'PENDING') {
+        continue;
+      }
+
+      const orderNum = order.orderNumber || `#${order.id.slice(0, 6)}`;
+      const thumb = order.items?.[0]?.image || VONDRO_NOTIFICATION_LOGO;
+      const pin = order.deliveryConfirmationCode || order.deliveryPin || '';
+
+      const isOnTheWay =
+        statusLower === 'shipped' ||
+        statusLower === 'enviado' ||
+        statusLower === 'out_for_delivery' ||
+        statusLower === 'en_camino' ||
+        shipUpper === 'OUT_FOR_DELIVERY' ||
+        shipUpper === 'READY_TO_SHIP';
+
+      const isDelivered =
+        statusLower === 'delivered' ||
+        statusLower === 'entregado' ||
+        statusLower === 'completed' ||
+        statusLower === 'finalizado' ||
+        shipUpper === 'DELIVERED';
+
+      const isPreparing =
+        statusLower === 'preparing' ||
+        statusLower === 'preparando' ||
+        shipUpper === 'PREPARING';
+
+      const isPaid = statusLower === 'payment_received' || statusLower === 'pago_aprobado';
+
+      let notifType: AppNotification['type'] | null = null;
+      let title = '';
+      let message = '';
+      let pushCategory: 'shipping' | 'order' = 'order';
+      let actionText = 'Ver Pedido';
+
+      if (isOnTheWay) {
+        notifType = shipUpper === 'OUT_FOR_DELIVERY' || statusLower === 'out_for_delivery' || statusLower === 'en_camino'
+          ? 'ORDER_OUT_FOR_DELIVERY'
+          : 'ORDER_SHIPPED';
+        title = `🚚 ¡Tu pedido ${orderNum} está en camino!`;
+        message = pin
+          ? `Tu paquete ya salió a reparto hacia tu domicilio. PIN de entrega: ${pin}.`
+          : `Tu paquete ya fue despachado y está en camino hacia tu domicilio.`;
+        pushCategory = 'shipping';
+        actionText = 'Rastrear Envío';
+      } else if (isDelivered) {
+        notifType = 'ORDER_DELIVERED';
+        title = `📦 ¡Pedido ${orderNum} entregado!`;
+        message = `Tu compra fue entregada con éxito. ¡Gracias por comprar en VONDRO!`;
+        pushCategory = 'order';
+      } else if (isPreparing) {
+        notifType = 'ORDER_PREPARING_PENDING';
+        title = `📦 Estamos preparando tu pedido ${orderNum}`;
+        message = `Tu compra está siendo embalada en nuestro depósito para salir a reparto.`;
+        pushCategory = 'order';
+      } else if (isPaid) {
+        notifType = 'PAYMENT_APPROVED';
+        title = `✅ ¡Pago confirmado! Pedido ${orderNum}`;
+        message = `Acreditamos tu pago por $${(order.total || 0).toLocaleString('es-AR')}. Pasó a preparación.`;
+        pushCategory = 'order';
+      }
+
+      if (notifType) {
+        const dedupeId = `notif-ord-${order.id}-${notifType.toLowerCase()}`;
+        if (!notificationsRef.current.some(n => n.id === dedupeId)) {
+          newAlerts.push({
+            notif: {
+              id: dedupeId,
+              userId: order.userId,
+              targetAudience: 'customer',
+              type: notifType,
+              title,
+              message,
+              priority: isOnTheWay || isPaid ? 'high' : 'normal',
+              entityType: 'order',
+              entityId: order.id,
+              imageUrl: thumb,
+              linkUrl: '/orders',
+              actionText,
+              read: false,
+              createdAt: new Date().toISOString()
+            },
+            push: prevSeen !== undefined || isOnTheWay
+              ? {
+                  title,
+                  body: message,
+                  category: pushCategory,
+                  actionText,
+                  url: '/orders',
+                  icon: VONDRO_NOTIFICATION_LOGO,
+                  image: order.items?.[0]?.image
+                }
+              : undefined
+          });
+        }
+      }
+    }
+
+    if (seenChanged) {
+      saveSeenOrderStatuses(nextSeen);
+    }
+
+    if (newAlerts.length > 0) {
+      const readIds = loadReadNotificationIds();
+      setNotifications(prev => {
+        const existingIds = new Set(prev.map(n => n.id));
+        const toAdd = newAlerts
+          .map(a => ({ ...a.notif, read: readIds.has(a.notif.id) }))
+          .filter(n => !existingIds.has(n.id));
+        if (toAdd.length === 0) return prev;
+        return [...toAdd, ...prev].slice(0, 80);
+      });
+
+      const latestPush = newAlerts.find(a => a.push)?.push;
+      if (latestPush) {
+        sendPushNotification(latestPush);
+      }
+    }
+  }, [orders, user?.id, user?.email]);
+
+  // Daily Offer + New Promo / Liquidation Arrivals scheduler
+  useEffect(() => {
+    if (!products || products.length === 0) return;
+
+    const timer = setTimeout(() => {
+      const currentNotifs = notificationsRef.current;
+      const arrivalsResult = detectNewPromoOrLiquidationArrivals(products, currentNotifs);
+      const dailyResult = buildDailyOfferForToday(products, currentNotifs);
+
+      const additions: AppNotification[] = [];
+      if (arrivalsResult) additions.push(arrivalsResult.notification);
+      if (dailyResult) additions.push(dailyResult.notification);
+
+      if (additions.length > 0) {
+        const readIds = loadReadNotificationIds();
+        setNotifications(prev => {
+          const existingIds = new Set(prev.map(n => n.id));
+          const uniqueAdditions = additions
+            .map(n => ({ ...n, read: readIds.has(n.id) }))
+            .filter(n => !existingIds.has(n.id));
+          if (uniqueAdditions.length === 0) return prev;
+          return [...uniqueAdditions, ...prev].slice(0, 80);
+        });
+      }
+
+      // Send one curated heads-up/push notification per day or when new promo/liquidation products arrive
+      if (arrivalsResult?.shouldPush) {
+        sendPushNotification(arrivalsResult.pushPayload);
+      } else if (dailyResult) {
+        sendPushNotification(dailyResult.pushPayload);
+      }
+    }, 1800);
+
+    return () => clearTimeout(timer);
+  }, [products]);
 
   // Calculations (CartView / CheckoutView operate strictly on selectedCartItems)
   const selectedCartItems = useMemo(
@@ -2981,6 +3204,44 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     removeCartItemsByKeys(purchasedItemKeys);
 
+    // Notify buyer immediately about completed purchase
+    try {
+      const purchaseThumb = finalOrder.items?.[0]?.image;
+      const orderSummaryTitle = `🛍️ ¡Compra realizada! Pedido ${finalOrder.orderNumber}`;
+      const orderSummaryMsg = `Recibimos tu compra por $${finalOrder.total.toLocaleString('es-AR')} (${finalOrder.items.length} ${finalOrder.items.length === 1 ? 'producto' : 'productos'}). Te avisaremos cuando salga en camino.`;
+      const createdNotif: AppNotification = {
+        id: `notif-ord-${finalOrder.id}-order_created`,
+        userId: finalOrder.userId,
+        targetAudience: 'all',
+        type: 'ORDER_CREATED',
+        title: orderSummaryTitle,
+        message: orderSummaryMsg,
+        priority: 'high',
+        entityType: 'order',
+        entityId: finalOrder.id,
+        imageUrl: purchaseThumb || VONDRO_NOTIFICATION_LOGO,
+        linkUrl: '/orders',
+        actionText: 'Ver Compra',
+        read: false,
+        createdAt: new Date().toISOString()
+      };
+      setNotifications(prev => [createdNotif, ...prev.filter(n => n.id !== createdNotif.id)].slice(0, 80));
+      if (isAdmin) {
+        createNotificationInFirestore(createdNotif).catch(console.warn);
+      }
+      sendPushNotification({
+        title: `🛍️ ¡Compra hecha en VONDRO!`,
+        body: `Pedido ${finalOrder.orderNumber} por $${finalOrder.total.toLocaleString('es-AR')} confirmado.`,
+        category: 'order',
+        actionText: 'Ver Mi Compra',
+        url: '/orders',
+        icon: VONDRO_NOTIFICATION_LOGO,
+        image: purchaseThumb
+      });
+    } catch {
+      // safe
+    }
+
     triggerCelebrationConfetti({
       particleCount: 100,
       spread: 80,
@@ -3356,6 +3617,45 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         orderId,
         total: updatedOrder.total
       });
+
+      // Notify customer that Mercado Pago purchase is confirmed
+      try {
+        const payThumb = updatedOrder.items?.[0]?.image;
+        const payNotifId = `notif-ord-${updatedOrder.id}-payment_approved`;
+        const payTitle = `✅ ¡Compra confirmada! Pedido ${updatedOrder.orderNumber}`;
+        const payBody = `Tu pago de $${updatedOrder.total.toLocaleString('es-AR')} fue aprobado. Ya preparamos tu envío.`;
+        const payNotif: AppNotification = {
+          id: payNotifId,
+          userId: updatedOrder.userId,
+          targetAudience: 'all',
+          type: 'PAYMENT_APPROVED',
+          title: payTitle,
+          message: payBody,
+          priority: 'high',
+          entityType: 'order',
+          entityId: updatedOrder.id,
+          imageUrl: payThumb || VONDRO_NOTIFICATION_LOGO,
+          linkUrl: '/orders',
+          actionText: 'Ver Compra',
+          read: false,
+          createdAt: new Date().toISOString()
+        };
+        setNotifications(prev => [payNotif, ...prev.filter(n => n.id !== payNotifId)].slice(0, 80));
+        if (isAdmin) {
+          createNotificationInFirestore(payNotif).catch(console.warn);
+        }
+        sendPushNotification({
+          title: payTitle,
+          body: payBody,
+          category: 'order',
+          actionText: 'Ver Mi Pedido',
+          url: '/orders',
+          icon: VONDRO_NOTIFICATION_LOGO,
+          image: payThumb
+        });
+      } catch {
+        // safe
+      }
     } else if (simulatedStatus === 'rejected' || simulatedStatus === 'cancelled') {
       targetOrder.items.forEach(item => {
         const current = products.find(p => p.id === item.productId);
@@ -3551,60 +3851,105 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Auto trigger push notifications & in-app alerts based on status change
     try {
       const targetOrder = orders.find(o => o.id === orderId);
-      const orderNum = targetOrder?.orderNumber || orderId.slice(0, 6);
+      const orderNum = targetOrder?.orderNumber || `#${orderId.slice(0, 6)}`;
+      const orderThumb = targetOrder?.items?.[0]?.image;
+      const pin = targetOrder?.deliveryConfirmationCode || targetOrder?.deliveryPin || '';
 
-      if (newStatus === 'shipped') {
+      if (newStatus === 'preparing' || newStatus === 'PREPARANDO') {
         sendPushNotification({
-          title: `🚚 ¡Tu pedido #${orderNum} está en camino!`,
-          body: `Tu paquete ya fue despachado y se dirige a tu domicilio en Córdoba.`,
-          category: 'shipping',
-          actionText: 'Rastrear Envío',
-          url: '/orders'
+          title: `📦 Estamos preparando tu pedido ${orderNum}`,
+          body: `Tu paquete está siendo embalado en nuestro depósito de Córdoba Capital.`,
+          category: 'order',
+          actionText: 'Ver Estado',
+          url: '/orders',
+          icon: VONDRO_NOTIFICATION_LOGO,
+          image: orderThumb
         });
         createNotification({
-          title: `🚚 Pedido #${orderNum} en camino`,
-          message: `El paquete fue despachado y está en viaje hacia tu dirección.`,
-          type: 'ORDER_SHIPPED',
-          priority: 'high',
-          targetAudience: 'all',
+          userId: targetOrder?.userId,
+          title: `📦 Pedido ${orderNum} en preparación`,
+          message: `Tu compra está siendo embalada y preparada para salir a reparto.`,
+          type: 'ORDER_PREPARING_PENDING',
+          priority: 'normal',
+          targetAudience: 'customer',
           entityType: 'order',
           entityId: orderId,
+          imageUrl: orderThumb || VONDRO_NOTIFICATION_LOGO,
+          linkUrl: '/orders',
           read: false
         }).catch(console.warn);
-      } else if (newStatus === 'delivered') {
+      } else if (newStatus === 'shipped' || newStatus === 'ENVIADO' || newStatus === 'out_for_delivery' || newStatus === 'EN_CAMINO') {
+        const isOutToday = newStatus === 'out_for_delivery' || newStatus === 'EN_CAMINO';
         sendPushNotification({
-          title: `📦 ¡Tu pedido #${orderNum} fue entregado!`,
+          title: `🚚 ¡Tu pedido ${orderNum} está en camino!`,
+          body: pin
+            ? `Tu paquete ya fue despachado hacia tu domicilio en Córdoba. PIN de entrega: ${pin}.`
+            : `Tu paquete ya fue despachado y se dirige a tu domicilio en Córdoba.`,
+          category: 'shipping',
+          actionText: 'Rastrear Envío',
+          url: '/orders',
+          icon: VONDRO_NOTIFICATION_LOGO,
+          image: orderThumb
+        });
+        createNotification({
+          userId: targetOrder?.userId,
+          title: `🚚 Pedido ${orderNum} en camino`,
+          message: pin
+            ? `El paquete fue despachado hacia tu dirección. PIN de recepción: ${pin}.`
+            : `El paquete fue despachado y está en viaje hacia tu dirección.`,
+          type: isOutToday ? 'ORDER_OUT_FOR_DELIVERY' : 'ORDER_SHIPPED',
+          priority: 'high',
+          targetAudience: 'customer',
+          entityType: 'order',
+          entityId: orderId,
+          imageUrl: orderThumb || VONDRO_NOTIFICATION_LOGO,
+          linkUrl: '/orders',
+          read: false
+        }).catch(console.warn);
+      } else if (newStatus === 'delivered' || newStatus === 'ENTREGADO' || newStatus === 'completed' || newStatus === 'FINALIZADO') {
+        sendPushNotification({
+          title: `📦 ¡Tu pedido ${orderNum} fue entregado!`,
           body: `Tu paquete fue entregado con éxito. ¡Esperamos que disfrutes tu compra en VONDRO!`,
           category: 'order',
           actionText: 'Ver Pedido',
-          url: '/orders'
+          url: '/orders',
+          icon: VONDRO_NOTIFICATION_LOGO,
+          image: orderThumb
         });
         createNotification({
-          title: `📦 Pedido #${orderNum} entregado`,
+          userId: targetOrder?.userId,
+          title: `📦 Pedido ${orderNum} entregado`,
           message: `El pedido fue entregado en mano satisfactoriamente.`,
           type: 'ORDER_DELIVERED',
           priority: 'normal',
-          targetAudience: 'all',
+          targetAudience: 'customer',
           entityType: 'order',
           entityId: orderId,
+          imageUrl: orderThumb || VONDRO_NOTIFICATION_LOGO,
+          linkUrl: '/orders',
           read: false
         }).catch(console.warn);
-      } else if (newStatus === 'payment_received') {
+      } else if (newStatus === 'payment_received' || newStatus === 'PAGO_APROBADO') {
         sendPushNotification({
-          title: `✅ ¡Pago acreditado - Pedido #${orderNum}!`,
+          title: `✅ ¡Pago acreditado - Pedido ${orderNum}!`,
           body: `Acreditación exitosa. Comenzamos con el empaquetado de tus productos en depósito.`,
           category: 'order',
           actionText: 'Ver Estado',
-          url: '/orders'
+          url: '/orders',
+          icon: VONDRO_NOTIFICATION_LOGO,
+          image: orderThumb
         });
         createNotification({
-          title: `✅ Pago confirmado - #${orderNum}`,
+          userId: targetOrder?.userId,
+          title: `✅ Pago confirmado - ${orderNum}`,
           message: `El pago ha sido acreditado exitosamente.`,
           type: 'PAYMENT_APPROVED',
           priority: 'high',
-          targetAudience: 'all',
+          targetAudience: 'customer',
           entityType: 'order',
           entityId: orderId,
+          imageUrl: orderThumb || VONDRO_NOTIFICATION_LOGO,
+          linkUrl: '/orders',
           read: false
         }).catch(console.warn);
       }
@@ -4028,30 +4373,45 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       id: newId,
       createdAt: new Date().toISOString()
     };
-    setNotifications(prev => [newNotif, ...prev]);
-    try {
-      await createNotificationInFirestore(notifData);
-    } catch (err) {
-      console.warn('Error creating notification in Firestore:', err);
+    setNotifications(prev => [newNotif, ...prev.filter(n => n.id !== newId)].slice(0, 80));
+    if (isAdmin) {
+      try {
+        await createNotificationInFirestore(notifData);
+      } catch (err) {
+        console.warn('Error creating notification in Firestore:', err);
+      }
     }
     return newId;
   };
 
   const markNotificationRead = async (notifId: string) => {
+    persistReadNotificationIds([notifId]);
     setNotifications(prev => prev.map(n => (n.id === notifId ? { ...n, read: true } : n)));
-    try {
-      await markNotificationReadInFirestore(notifId, true);
-    } catch (err) {
-      console.warn('Error marking notification read in Firestore:', err);
+    const isLocalOnly = notifId.startsWith('notif-daily-') || notifId.startsWith('notif-promo-') || notifId.startsWith('notif-ord-');
+    if (isAdmin && !isLocalOnly) {
+      try {
+        await markNotificationReadInFirestore(notifId, true);
+      } catch (err) {
+        console.warn('Error marking notification read in Firestore:', err);
+      }
     }
   };
 
   const markAllNotificationsRead = async () => {
+    const allIds = notifications.map(n => n.id);
+    persistReadNotificationIds(allIds);
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    try {
-      await markAllNotificationsReadInFirestore(notifications);
-    } catch (err) {
-      console.warn('Error marking all notifications read in Firestore:', err);
+    if (isAdmin) {
+      try {
+        const remoteOnly = notifications.filter(
+          n => !n.id.startsWith('notif-daily-') && !n.id.startsWith('notif-promo-') && !n.id.startsWith('notif-ord-')
+        );
+        if (remoteOnly.length > 0) {
+          await markAllNotificationsReadInFirestore(remoteOnly);
+        }
+      } catch (err) {
+        console.warn('Error marking all notifications read in Firestore:', err);
+      }
     }
   };
 
@@ -4544,6 +4904,84 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       });
     } catch (e) {
       console.warn('Error updating shipping status in firestore:', e);
+    }
+
+    // Trigger customer notification & push when logistics/shipping status advances
+    try {
+      const targetOrder = updatedOrderObj || orders.find(o => o.id === orderId);
+      const orderNum = targetOrder?.orderNumber || `#${orderId.slice(0, 6)}`;
+      const orderThumb = targetOrder?.items?.[0]?.image;
+      const pin = targetOrder?.deliveryConfirmationCode || targetOrder?.deliveryPin || '';
+
+      if (newShippingStatus === 'OUT_FOR_DELIVERY' || newShippingStatus === 'READY_TO_SHIP') {
+        const title = `🚚 ¡Tu pedido ${orderNum} está en camino!`;
+        const msg = pin
+          ? `El repartidor ya salió hacia tu domicilio en Córdoba. PIN de entrega: ${pin}.`
+          : `Tu paquete ya salió a reparto hacia tu domicilio en Córdoba.`;
+        sendPushNotification({
+          title,
+          body: msg,
+          category: 'shipping',
+          actionText: 'Rastrear Envío',
+          url: '/orders',
+          icon: VONDRO_NOTIFICATION_LOGO,
+          image: orderThumb
+        });
+        createNotification({
+          userId: targetOrder?.userId,
+          title,
+          message: msg,
+          type: 'ORDER_OUT_FOR_DELIVERY',
+          priority: 'high',
+          targetAudience: 'customer',
+          entityType: 'order',
+          entityId: orderId,
+          imageUrl: orderThumb || VONDRO_NOTIFICATION_LOGO,
+          linkUrl: '/orders',
+          read: false
+        }).catch(console.warn);
+      } else if (newShippingStatus === 'PREPARING') {
+        createNotification({
+          userId: targetOrder?.userId,
+          title: `📦 Pedido ${orderNum} en preparación`,
+          message: `Estamos embalando tu compra para despacharla pronto.`,
+          type: 'ORDER_PREPARING_PENDING',
+          priority: 'normal',
+          targetAudience: 'customer',
+          entityType: 'order',
+          entityId: orderId,
+          imageUrl: orderThumb || VONDRO_NOTIFICATION_LOGO,
+          linkUrl: '/orders',
+          read: false
+        }).catch(console.warn);
+      } else if (newShippingStatus === 'DELIVERED') {
+        const title = `📦 ¡Pedido ${orderNum} entregado!`;
+        const msg = `El pedido fue recibido en tu domicilio con éxito. ¡Gracias por elegir VONDRO!`;
+        sendPushNotification({
+          title,
+          body: msg,
+          category: 'order',
+          actionText: 'Ver Compra',
+          url: '/orders',
+          icon: VONDRO_NOTIFICATION_LOGO,
+          image: orderThumb
+        });
+        createNotification({
+          userId: targetOrder?.userId,
+          title,
+          message: msg,
+          type: 'ORDER_DELIVERED',
+          priority: 'normal',
+          targetAudience: 'customer',
+          entityType: 'order',
+          entityId: orderId,
+          imageUrl: orderThumb || VONDRO_NOTIFICATION_LOGO,
+          linkUrl: '/orders',
+          read: false
+        }).catch(console.warn);
+      }
+    } catch {
+      // safe
     }
   };
 

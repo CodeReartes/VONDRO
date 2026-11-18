@@ -19,25 +19,58 @@ import {
 import { scrollToTop } from './utils/scrollHelper';
 import { WifiOff, CheckCircle2, Gift, Loader2 } from 'lucide-react';
 
-const ProductDetailView = lazy(() => import('./components/ProductDetailView').then(m => ({ default: m.ProductDetailView })));
-const CartView = lazy(() => import('./components/CartView').then(m => ({ default: m.CartView })));
-const CheckoutView = lazy(() => import('./components/CheckoutView').then(m => ({ default: m.CheckoutView })));
-const CategoriesView = lazy(() => import('./components/CategoriesView').then(m => ({ default: m.CategoriesView })));
-const SearchView = lazy(() => import('./components/SearchView').then(m => ({ default: m.SearchView })));
-const FavoritesView = lazy(() => import('./components/FavoritesView').then(m => ({ default: m.FavoritesView })));
-const ProfileView = lazy(() => import('./components/ProfileView').then(m => ({ default: m.ProfileView })));
-const SecurityView = lazy(() => import('./components/SecurityView').then(m => ({ default: m.SecurityView })));
-const LegalPoliciesView = lazy(() => import('./components/LegalPoliciesView').then(m => ({ default: m.LegalPoliciesView })));
-const HelpCenterView = lazy(() => import('./components/HelpCenterView').then(m => ({ default: m.HelpCenterView })));
-const PersonalDataView = lazy(() => import('./components/PersonalDataView').then(m => ({ default: m.PersonalDataView })));
-const PWAInstallBanner = lazy(() => import('./components/PWAInstallBanner').then(m => ({ default: m.PWAInstallBanner })));
-const LoginView = lazy(() => import('./components/LoginView').then(m => ({ default: m.LoginView })));
-const OrdersView = lazy(() => import('./components/OrdersView').then(m => ({ default: m.OrdersView })));
-const OrderDetailView = lazy(() => import('./components/OrderDetailView').then(m => ({ default: m.OrderDetailView })));
-const PaymentResultView = lazy(() => import('./components/PaymentResultView').then(m => ({ default: m.PaymentResultView })));
-const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
-const AssistantChat = lazy(() => import('./components/Assistant/AssistantChat').then(m => ({ default: m.AssistantChat })));
-const DrawerMenu = lazy(() => import('./components/DrawerMenu').then(m => ({ default: m.DrawerMenu })));
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  importer: () => Promise<{ default: T }>
+): React.LazyExoticComponent<T> {
+  return lazy(async () => {
+    const delays = [250, 600, 1200];
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= delays.length; attempt++) {
+      try {
+        return await importer();
+      } catch (err) {
+        lastError = err;
+        if (attempt < delays.length) {
+          await new Promise((r) => setTimeout(r, delays[attempt]));
+        }
+      }
+    }
+
+    // If all retries failed (e.g., stale hashed chunk after deploy), perform a single safe reload
+    try {
+      const lastReload = Number(sessionStorage.getItem('vondro_chunk_reload_at') || '0');
+      if (Date.now() - lastReload > 30000) {
+        sessionStorage.setItem('vondro_chunk_reload_at', String(Date.now()));
+        window.location.reload();
+        return await new Promise<{ default: T }>(() => {});
+      }
+    } catch {
+      // ignore storage errors
+    }
+
+    throw lastError;
+  });
+}
+
+const ProductDetailView = lazyWithRetry(() => import('./components/ProductDetailView').then(m => ({ default: m.ProductDetailView })));
+const CartView = lazyWithRetry(() => import('./components/CartView').then(m => ({ default: m.CartView })));
+const CheckoutView = lazyWithRetry(() => import('./components/CheckoutView').then(m => ({ default: m.CheckoutView })));
+const CategoriesView = lazyWithRetry(() => import('./components/CategoriesView').then(m => ({ default: m.CategoriesView })));
+const SearchView = lazyWithRetry(() => import('./components/SearchView').then(m => ({ default: m.SearchView })));
+const FavoritesView = lazyWithRetry(() => import('./components/FavoritesView').then(m => ({ default: m.FavoritesView })));
+const ProfileView = lazyWithRetry(() => import('./components/ProfileView').then(m => ({ default: m.ProfileView })));
+const SecurityView = lazyWithRetry(() => import('./components/SecurityView').then(m => ({ default: m.SecurityView })));
+const LegalPoliciesView = lazyWithRetry(() => import('./components/LegalPoliciesView').then(m => ({ default: m.LegalPoliciesView })));
+const HelpCenterView = lazyWithRetry(() => import('./components/HelpCenterView').then(m => ({ default: m.HelpCenterView })));
+const PersonalDataView = lazyWithRetry(() => import('./components/PersonalDataView').then(m => ({ default: m.PersonalDataView })));
+const PWAInstallBanner = lazyWithRetry(() => import('./components/PWAInstallBanner').then(m => ({ default: m.PWAInstallBanner })));
+const LoginView = lazyWithRetry(() => import('./components/LoginView').then(m => ({ default: m.LoginView })));
+const OrdersView = lazyWithRetry(() => import('./components/OrdersView').then(m => ({ default: m.OrdersView })));
+const OrderDetailView = lazyWithRetry(() => import('./components/OrderDetailView').then(m => ({ default: m.OrderDetailView })));
+const PaymentResultView = lazyWithRetry(() => import('./components/PaymentResultView').then(m => ({ default: m.PaymentResultView })));
+const AdminDashboard = lazyWithRetry(() => import('./components/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const AssistantChat = lazyWithRetry(() => import('./components/Assistant/AssistantChat').then(m => ({ default: m.AssistantChat })));
+const DrawerMenu = lazyWithRetry(() => import('./components/DrawerMenu').then(m => ({ default: m.DrawerMenu })));
 
 const ViewFallback: React.FC = () => (
   <div className="flex items-center justify-center min-h-[45vh] w-full text-slate-400">

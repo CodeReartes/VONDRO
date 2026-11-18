@@ -1,5 +1,5 @@
 // VONDRO Service Worker - PWA, Offline & Zero-Data Repeat Image Cache
-const CACHE_NAME = 'vondro-v1.1';
+const CACHE_NAME = 'vondro-v1.2';
 const IMG_CACHE = 'vondro-img-v1';
 const MAX_IMG_CACHE_ENTRIES = 500;
 const STATIC_ASSETS = [
@@ -78,8 +78,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Other API calls and Firestore operations are handled live
-  if (request.url.includes('/api/') || request.url.includes('firestore.googleapis.com')) {
+  // Never intercept Vite dev modules, source files, APIs (except /api/img), or Firestore
+  const reqUrl = new URL(request.url);
+  if (
+    reqUrl.pathname.startsWith('/src/') ||
+    reqUrl.pathname.startsWith('/@') ||
+    reqUrl.pathname.startsWith('/node_modules/') ||
+    request.url.includes('/api/') ||
+    request.url.includes('firestore.googleapis.com')
+  ) {
     return;
   }
 
@@ -100,11 +107,35 @@ self.addEventListener('fetch', (event) => {
             return cachedResponse;
           }
           if (request.mode === 'navigate') {
-            return caches.match('/');
+            return caches.match('/').then((r) => r || Response.error());
           }
+          return Response.error();
         });
 
       return cachedResponse || fetchPromise;
+    })
+  );
+});
+
+// Handle native OS push notification click
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url) || '/';
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ('focus' in client) {
+          client.focus();
+          if ('navigate' in client && targetUrl) {
+            client.navigate(targetUrl).catch(() => {});
+          }
+          return;
+        }
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
     })
   );
 });
