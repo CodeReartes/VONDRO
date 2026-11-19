@@ -233,11 +233,11 @@ export const CustomerNotificationsModal: React.FC<CustomerNotificationsModalProp
         {/* Branded Header */}
         <div className="px-4 py-3 bg-gradient-to-r from-[#1E0E45] via-[#2D1463] to-[#4C1D95] text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
+            <div className="w-9 h-9 rounded-xl bg-white border border-white/80 flex items-center justify-center overflow-hidden shrink-0 shadow-xs p-0.5">
               <img 
                 src={VONDRO_NOTIFICATION_LOGO} 
-                alt="VONDRO" 
-                className="w-full h-full object-cover"
+                alt="Logo" 
+                className="w-full h-full object-contain"
                 onError={(e) => {
                   (e.currentTarget as HTMLImageElement).style.display = 'none';
                 }}
@@ -245,7 +245,7 @@ export const CustomerNotificationsModal: React.FC<CustomerNotificationsModalProp
             </div>
             <div className="min-w-0">
               <h3 className="text-sm font-black text-white tracking-tight truncate">
-                Notificaciones VONDRO
+                Notificaciones
               </h3>
               <p className="text-[11px] text-purple-200/90 leading-tight truncate tabular-nums">
                 {unreadCount > 0 

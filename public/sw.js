@@ -1,5 +1,5 @@
 // VONDRO Service Worker - PWA, Offline & Zero-Data Repeat Image Cache
-const CACHE_NAME = 'vondro-v1.2';
+const CACHE_NAME = 'vondro-v1.3';
 const IMG_CACHE = 'vondro-img-v1';
 const MAX_IMG_CACHE_ENTRIES = 500;
 const STATIC_ASSETS = [
@@ -8,6 +8,7 @@ const STATIC_ASSETS = [
   '/manifest.json',
   '/icon.svg',
   '/icon-192.png',
+  '/vondro-notif-logo.png',
   '/icon-512.png',
   '/apple-touch-icon.png'
 ];

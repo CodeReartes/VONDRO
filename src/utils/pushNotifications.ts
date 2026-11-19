@@ -1,6 +1,6 @@
 import { Order } from '../types';
 
-export const VONDRO_NOTIFICATION_LOGO = '/icon-192.png';
+export const VONDRO_NOTIFICATION_LOGO = '/vondro-notif-logo.png';
 
 export interface PushNotificationPayload {
   title: string;
@@ -10,6 +10,7 @@ export interface PushNotificationPayload {
   url?: string;
   icon?: string;
   image?: string;
+  inAppBanner?: boolean;
 }
 
 /**
@@ -21,7 +22,7 @@ export function sendPushNotification(payload: PushNotificationPayload) {
     icon: payload.icon || VONDRO_NOTIFICATION_LOGO
   };
 
-  if (typeof window !== 'undefined') {
+  if (typeof window !== 'undefined' && brandedPayload.inAppBanner !== false) {
     window.dispatchEvent(new CustomEvent<PushNotificationPayload>('vondro-push-received', { detail: brandedPayload }));
   }
 

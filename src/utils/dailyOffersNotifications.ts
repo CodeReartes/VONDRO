@@ -130,7 +130,7 @@ export function buildDailyOfferForToday(
   const deal = candidates[idx];
   const info = getProductOfferDetails(deal);
   const displayPct = info.pct >= 10 ? info.pct : 20;
-  const thumb = deal.image || (deal.images && deal.images[0]) || '/icon-192.png';
+  const thumb = deal.image || (deal.images && deal.images[0]) || '/vondro-notif-logo.png';
 
   const label = info.isLiquidation
     ? 'Liquidación del día'
@@ -163,7 +163,7 @@ export function buildDailyOfferForToday(
     category: 'offer',
     actionText: 'Aprovechar Oferta',
     url: `/?product=${deal.id}`,
-    icon: '/icon-192.png',
+    icon: '/vondro-notif-logo.png',
     image: thumb
   };
 
@@ -176,8 +176,27 @@ export function buildDailyOfferForToday(
   return { notification, pushPayload };
 }
 
+const DAILY_TAB_PUSH_DATE_KEY = 'vondro_daily_tab_push_date_v1';
+
+export function hasDailyTabPushBeenSentToday(): boolean {
+  try {
+    return localStorage.getItem(DAILY_TAB_PUSH_DATE_KEY) === getArgentinaDateKey();
+  } catch {
+    return false;
+  }
+}
+
+export function markDailyTabPushSentToday(): void {
+  try {
+    localStorage.setItem(DAILY_TAB_PUSH_DATE_KEY, getArgentinaDateKey());
+  } catch {
+    // ignore
+  }
+}
+
 /**
  * Detects newly arrived or restocked products in promo / liquidation and creates a notification.
+ * Strictly capped to at most 1 notification per calendar day to avoid invasive alerts.
  */
 export function detectNewPromoOrLiquidationArrivals(
   products: Product[],
@@ -209,34 +228,35 @@ export function detectNewPromoOrLiquidationArrivals(
     previousSeenIds = null;
   }
 
-  // Persist current set (cap at 500 IDs for compact storage)
+  // Persist ALL seen promo IDs so items beyond index 500 never trigger false-positive arrivals
   try {
-    localStorage.setItem(SEEN_PROMO_IDS_KEY, JSON.stringify(currentIds.slice(0, 500)));
+    localStorage.setItem(SEEN_PROMO_IDS_KEY, JSON.stringify(currentIds));
   } catch {
     // ignore
   }
 
-  // First visit baseline: provide 1 curated promo/liquidation arrivals summary for today if none exists
-  if (!previousSeenIds) {
-    const welcomePromoId = `notif-promo-arrivals-${todayAr}`;
-    if (existingNotifications.some(n => n.id === welcomePromoId)) {
-      return null;
-    }
+  // Only emit at most 1 promo-arrival entry per day in the notifications bell
+  const dailyArrivalId = `notif-promo-arrivals-${todayAr}`;
+  if (existingNotifications.some(n => n.id === dailyArrivalId || n.id.startsWith(`notif-promo-new-${todayAr}`))) {
+    return null;
+  }
 
+  // First visit or baseline capture
+  if (!previousSeenIds || previousSeenIds.size < 60) {
     const spotlight = promoProducts
       .filter(p => getProductOfferDetails(p).isLiquidation || getProductOfferDetails(p).isNewArrival)
       .slice(0, 3);
     const featuredList = spotlight.length > 0 ? spotlight : promoProducts.slice(0, 3);
     const first = featuredList[0];
-    const thumb = first.image || (first.images && first.images[0]) || '/icon-192.png';
+    const thumb = first.image || (first.images && first.images[0]) || '/vondro-notif-logo.png';
     const namesPreview = featuredList.map(p => p.name).slice(0, 2).join(' · ');
 
     const notification: AppNotification = {
-      id: welcomePromoId,
+      id: dailyArrivalId,
       targetAudience: 'customer',
       type: 'PRICE_DROP',
       title: `✨ ${promoProducts.length} productos en Promo y Liquidación`,
-      message: `Ingresos destacados con descuento: ${namesPreview}. Tocá para ver todas las liquidaciones disponibles.`,
+      message: `Destacados de hoy con descuento: ${namesPreview}. Tocá para ver todas las liquidaciones disponibles.`,
       priority: 'normal',
       entityType: 'product',
       entityId: first.id,
@@ -255,38 +275,35 @@ export function detectNewPromoOrLiquidationArrivals(
         category: 'offer',
         actionText: 'Ver Ofertas',
         url: '/?tab=search&filter=offers',
-        icon: '/icon-192.png',
-        image: thumb
+        icon: '/vondro-notif-logo.png',
+        image: thumb,
+        inAppBanner: false
       },
-      shouldPush: false // Daily offer push takes spotlight on initial boot
+      shouldPush: false
     };
   }
 
-  // Compare against previous baseline to catch genuinely new promo/liquidation arrivals
+  // Compare against full baseline to catch genuinely new promo/liquidation arrivals
   const newlyAddedPromos = promoProducts.filter(p => !previousSeenIds!.has(p.id));
   if (newlyAddedPromos.length === 0) return null;
 
   const firstNew = newlyAddedPromos[0];
   const info = getProductOfferDetails(firstNew);
-  const thumb = firstNew.image || (firstNew.images && firstNew.images[0]) || '/icon-192.png';
-  const notifId = `notif-promo-new-${todayAr}-${firstNew.id.slice(0, 12)}`;
-
-  if (existingNotifications.some(n => n.id === notifId)) {
-    return null;
-  }
+  const thumb = firstNew.image || (firstNew.images && firstNew.images[0]) || '/vondro-notif-logo.png';
+  const notifId = `notif-promo-new-${todayAr}`;
 
   const title =
     newlyAddedPromos.length === 1
       ? `🏷️ ¡Nuevo en Promo/Liquidación!`
-      : `✨ ¡Llegaron ${newlyAddedPromos.length} productos en Promo y Liquidación!`;
+      : `✨ ¡Nuevos ingresos en Promo y Liquidación!`;
 
   const message =
     newlyAddedPromos.length === 1
       ? `${firstNew.name} ingresó con ${info.pct >= 10 ? `${info.pct}% OFF ` : ''}a $${firstNew.salePrice.toLocaleString('es-AR')}.`
-      : `Nuevos ingresos con descuento: ${newlyAddedPromos
+      : `Ingresaron ${newlyAddedPromos.length} novedades con descuento (${newlyAddedPromos
           .slice(0, 2)
           .map(p => p.name)
-          .join(', ')}. ¡Aprovechalos antes que se agoten!`;
+          .join(', ')}).`;
 
   const url = newlyAddedPromos.length === 1 ? `/?product=${firstNew.id}` : '/?tab=search&filter=offers';
 
@@ -296,7 +313,7 @@ export function detectNewPromoOrLiquidationArrivals(
     type: 'PRICE_DROP',
     title,
     message,
-    priority: 'high',
+    priority: 'normal',
     entityType: 'product',
     entityId: firstNew.id,
     imageUrl: thumb,
@@ -314,10 +331,11 @@ export function detectNewPromoOrLiquidationArrivals(
       category: 'offer',
       actionText: 'Ver Novedades',
       url,
-      icon: '/icon-192.png',
-      image: thumb
+      icon: '/vondro-notif-logo.png',
+      image: thumb,
+      inAppBanner: false
     },
-    shouldPush: true
+    shouldPush: false
   };
 }
 

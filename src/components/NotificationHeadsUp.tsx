@@ -103,7 +103,7 @@ export const NotificationHeadsUp: React.FC = () => {
       default:
         return {
           icon: <Bell className="w-3 h-3 text-purple-300 shrink-0" />,
-          label: 'Aviso VONDRO'
+          label: 'Notificación'
         };
     }
   };
@@ -116,13 +116,13 @@ export const NotificationHeadsUp: React.FC = () => {
         onClick={handleActionClick}
         className="bg-slate-950/95 backdrop-blur-md text-white rounded-2xl p-3 shadow-2xl border border-purple-500/35 cursor-pointer hover:bg-slate-900 transition-all flex items-start gap-3 relative group"
       >
-        {/* Official VONDRO Brand Logo */}
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-700 via-violet-700 to-indigo-900 flex items-center justify-center shrink-0 shadow-md overflow-hidden border border-white/15">
+        {/* Official VONDRO Bag Logo Only (no text) */}
+        <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-md overflow-hidden border border-white/80 p-0.5">
           {!logoImgFailed ? (
             <img
               src={currentNotif.icon || VONDRO_NOTIFICATION_LOGO}
-              alt="Logo VONDRO"
-              className="w-full h-full object-cover"
+              alt="Logo"
+              className="w-full h-full object-contain"
               onError={() => setLogoImgFailed(true)}
             />
           ) : (
@@ -133,8 +133,6 @@ export const NotificationHeadsUp: React.FC = () => {
         {/* Content */}
         <div className="flex-1 min-w-0 pr-5">
           <div className="flex items-center gap-1.5 text-[10.5px] text-slate-300 mb-0.5">
-            <span className="font-black tracking-wide text-white">VONDRO</span>
-            <span aria-hidden="true" className="text-slate-500">·</span>
             <span className="inline-flex items-center gap-1 font-semibold text-purple-200 truncate">
               {meta.icon}
               <span>{meta.label}</span>

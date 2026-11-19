@@ -93,6 +93,8 @@ import { sendPushNotification, VONDRO_NOTIFICATION_LOGO } from '../utils/pushNot
 import {
   buildDailyOfferForToday,
   detectNewPromoOrLiquidationArrivals,
+  hasDailyTabPushBeenSentToday,
+  markDailyTabPushSentToday,
   loadReadNotificationIds,
   persistReadNotificationIds,
   loadSeenOrderStatuses,
@@ -2158,8 +2160,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [orders, user?.id, user?.email]);
 
   // Daily Offer + New Promo / Liquidation Arrivals scheduler
+  // Populates the bell notifications quietly while browsing; browser/tab push runs max 1x/day when user is away from the tab.
+  const pendingDailyTabPushRef = useRef<Parameters<typeof sendPushNotification>[0] | null>(null);
+
   useEffect(() => {
-    if (!products || products.length === 0) return;
+    if (!products || (!hasRemoteProductsSnapshot && products.length < 150)) return;
 
     const timer = setTimeout(() => {
       const currentNotifs = notificationsRef.current;
@@ -2167,8 +2172,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const dailyResult = buildDailyOfferForToday(products, currentNotifs);
 
       const additions: AppNotification[] = [];
-      if (arrivalsResult) additions.push(arrivalsResult.notification);
       if (dailyResult) additions.push(dailyResult.notification);
+      else if (arrivalsResult) additions.push(arrivalsResult.notification);
 
       if (additions.length > 0) {
         const readIds = loadReadNotificationIds();
@@ -2182,16 +2187,32 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         });
       }
 
-      // Send one curated heads-up/push notification per day or when new promo/liquidation products arrive
-      if (arrivalsResult?.shouldPush) {
-        sendPushNotification(arrivalsResult.pushPayload);
-      } else if (dailyResult) {
-        sendPushNotification(dailyResult.pushPayload);
+      const candidatePush = dailyResult?.pushPayload || arrivalsResult?.pushPayload;
+      if (candidatePush && !hasDailyTabPushBeenSentToday()) {
+        pendingDailyTabPushRef.current = { ...candidatePush, inAppBanner: false };
       }
-    }, 1800);
+    }, 2200);
 
     return () => clearTimeout(timer);
-  }, [products]);
+  }, [products, hasRemoteProductsSnapshot]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && pendingDailyTabPushRef.current && !hasDailyTabPushBeenSentToday()) {
+        const payload = pendingDailyTabPushRef.current;
+        pendingDailyTabPushRef.current = null;
+        markDailyTabPushSentToday();
+        sendPushNotification({ ...payload, inAppBanner: false });
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   // Calculations (CartView / CheckoutView operate strictly on selectedCartItems)
   const selectedCartItems = useMemo(
